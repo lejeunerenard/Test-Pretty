@@ -4,7 +4,12 @@ use warnings;
 use 5.008001;
 our $VERSION = '0.30';
 
-use Test::Builder 0.82;
+use Test::Stream (
+    subtest_tap => 'delayed',
+    'OUT_STD',
+    'OUT_ERR',
+    'OUT_TODO',
+);
 use Term::Encoding ();
 use File::Spec ();
 use Term::ANSIColor ();
@@ -18,9 +23,13 @@ use Cwd ();
 
 my $ORIGINAL_PID = $$;
 
+$ENV{TEST_PRETTY_INDENT} ||= '    ';
+
 my $SHOW_DUMMY_TAP;
 my $TERM_ENCODING = Term::Encoding::term_encoding();
 my $ENCODING_IS_UTF8 = $TERM_ENCODING =~ /^utf-?8$/i;
+
+my $DEBUG = 1;
 
 our $NO_ENDING; # Force disable the Test::Pretty finalization process.
 
@@ -48,51 +57,60 @@ my $get_src_line = sub {
 
 if ((!$ENV{HARNESS_ACTIVE} || $ENV{PERL_TEST_PRETTY_ENABLED})) {
     # make pretty
-    no warnings 'redefine';
-    *Test::Builder::subtest = \&_subtest;
-    *Test::Builder::ok = \&_ok;
-    *Test::Builder::done_testing = \&_done_testing;
-    *Test::Builder::skip = \&_skip;
-    *Test::Builder::skip_all = \&_skip_all;
-    *Test::Builder::expected_tests = \&_expected_tests;
+    
+    #*Test::Builder::subtest = \&_subtest;
+    #*Test::Builder::ok = \&_ok;
+    #*Test::Builder::done_testing = \&_done_testing;
+    #*Test::Builder::skip = \&_skip;
+    #*Test::Builder::skip_all = \&_skip_all;
+    #*Test::Builder::expected_tests = \&_expected_tests;
 
-    my %plan_cmds = (
-        no_plan     => \&Test::Builder::no_plan,
-        skip_all    => \&_skip_all,
-        tests       => \&__plan_tests,
-    );
-    *Test::Builder::plan = sub {
-        my( $self, $cmd, $arg ) = @_;
+    # Use Test::Stream
+    # Turn off normal TAP output
+    Test::Stream->shared->set_use_tap(0);
 
-        return unless $cmd;
+    # Turn off legacy storage of results.
+    Test::Stream->shared->set_use_legacy(0);
 
-        local $Test::Builder::Level = $Test::Builder::Level + 1;
+    Test::Stream->shared->listen(\&stream_listener);
 
-        $self->croak("You tried to plan twice") if $self->{Have_Plan};
+    # my %plan_cmds = (
+    #     no_plan     => \&Test::Builder::no_plan,
+    #     skip_all    => \&_skip_all,
+    #     tests       => \&__plan_tests,
+    # );
+    # *Test::Builder::plan = sub {
+    #     my( $self, $cmd, $arg ) = @_;
 
-        if( my $method = $plan_cmds{$cmd} ) {
-            local $Test::Builder::Level = $Test::Builder::Level + 1;
-            $self->$method($arg);
-        }
-        else {
-            my @args = grep { defined } ( $cmd, $arg );
-            $self->croak("plan() doesn't understand @args");
-        }
+    #     return unless $cmd;
 
-        return 1;
-    };
+    #     local $Test::Builder::Level = $Test::Builder::Level + 1;
 
-    my $builder = Test::Builder->new;
-    $builder->no_ending(1);
-    $builder->no_header(1); # plan
+    #     $self->croak("You tried to plan twice") if $self->{Have_Plan};
 
-    binmode $builder->output(), "encoding($TERM_ENCODING)";
-    binmode $builder->failure_output(), "encoding($TERM_ENCODING)";
-    binmode $builder->todo_output(), "encoding($TERM_ENCODING)";
+    #     if( my $method = $plan_cmds{$cmd} ) {
+    #         local $Test::Builder::Level = $Test::Builder::Level + 1;
+    #         $self->$method($arg);
+    #     }
+    #     else {
+    #         my @args = grep { defined } ( $cmd, $arg );
+    #         $self->croak("plan() doesn't understand @args");
+    #     }
 
-    if ($ENV{HARNESS_ACTIVE}) {
-        $SHOW_DUMMY_TAP++;
-    }
+    #     return 1;
+    # };
+
+    # my $builder = Test::Builder->new;
+    # $builder->no_ending(1);
+    # $builder->no_header(1); # plan
+
+    # binmode $builder->output(), "encoding($TERM_ENCODING)";
+    # binmode $builder->failure_output(), "encoding($TERM_ENCODING)";
+    # binmode $builder->todo_output(), "encoding($TERM_ENCODING)";
+
+    # if ($ENV{HARNESS_ACTIVE}) {
+    #     $SHOW_DUMMY_TAP++;
+    # }
 } else {
     no warnings 'redefine';
     my $ORIGINAL_ok = \&Test::Builder::ok;
@@ -175,6 +193,76 @@ END {
         }
     }
 NO_ENDING:
+}
+
+sub stream_listener {
+    my ($stream, $e) = @_;
+
+    $DEBUG && print STDERR "---- event ----\n";
+    my $type = blessed $e;
+    $type =~ s/^.*:://g;
+    $DEBUG && print STDERR "type: " . lc($type) . "\n";
+    $DEBUG && print STDERR "=> In Subtest (". $e->in_subtest. ")\n" if $e->in_subtest;
+
+    my $context = $e->context;
+
+    my @sets;
+
+    if ($e->isa('Test::Stream::Event::Subtest')) {
+        # Subtest is a subclass of Ok, use Ok's to_tap method:
+        #print STDERR "e->to_tap(): ".Dumper($e->to_tap(undef, $stream->subtest_tap_delayed))."\n";
+        #@sets = subtest_render_events($e, undef, $stream->subtest_tap_delayed);
+        #$e->context->stream->listen(\&stream_listener);
+        @sets = $e->to_tap(undef, $stream->subtest_tap_delayed);
+    } elsif ( $e->isa('Test::Stream::Event::Ok') ) {
+        my $name = $e->name || "  L" . $context->line . ": ". $context->file;
+        @sets = $e->to_tap;
+
+        my $out;
+
+        unless($e->real_bool) {
+            my $fail_char = $ENCODING_IS_UTF8 ? "\x{2716}" : "x";
+            $out .= colored(['red'], $fail_char);
+        }
+        else {
+            my $success_char = $ENCODING_IS_UTF8 ? "\x{2713}" : "o";
+            $out .= colored(['green'], $success_char);
+        }
+
+        # Add name
+        if( defined $name ) {
+            $name =~ s|#|\\#|g;    # # in a name can confuse Test::Harness.
+            $out .= colored([$ENV{TEST_PRETTY_COLOR_NAME} || 'BRIGHT_BLACK'], "  $name");
+        }
+
+        $out .= "\n";
+
+        # Replace STDOUT
+        for my $set ( @sets ) {
+            if ( $set->[0] == OUT_STD ) {
+                $set = [
+                    OUT_STD, $out,
+                ];
+            }
+        }
+    }
+
+    for my $set (@sets) {
+        my ($hid, $msg) = @$set;
+        next unless $msg;
+        my $enc = $e->encoding || die "Could not find encoding!";
+
+        # This is how you get the proper handle to use (STDERR, STDOUT, ETC).
+        my $io = $stream->io_sets->{$enc}->[$hid] || die "Could not find IO $hid for $enc";
+
+        # Make sure we don't alter these vars.
+        local($\, $", $,) = (undef, ' ', '');
+
+        # Otherwise we get "Wide character in print" errors.
+        binmode $io, "encoding($TERM_ENCODING)";
+        # print to the IO
+        print $io $msg;
+    }
 }
 
 sub _skip_all {
@@ -327,6 +415,24 @@ sub _subtest {
     my $retval = $ORIGINAL_subtest->(@_);
     *Test::Builder::note = $ORIGINAL_note;
     $retval;
+}
+sub subtest_render_events {
+    my $self = shift;
+    my ($num, $delayed) = @_;
+
+    my $idx = 0;
+    my @out;
+    for my $e (@{$self->events}) {
+        next unless $e->can('to_tap');
+        $idx++ if $e->isa('Test::Stream::Event::Ok');
+        push @out => $e->to_tap($idx, $delayed);
+    }
+
+    for my $set (@out) {
+        $set->[1] =~ s/^/$ENV{TEST_PRETTY_INDENT}/mg;
+    }
+
+    return @out;
 }
 
 sub __plan_tests {
