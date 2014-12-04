@@ -5,7 +5,7 @@ use 5.008001;
 our $VERSION = '0.30';
 
 use Test::Stream (
-    subtest_tap => 'delayed',
+   #subtest_tap => 'delayed',
     'OUT_STD',
     'OUT_ERR',
     'OUT_TODO',
@@ -29,7 +29,7 @@ my $SHOW_DUMMY_TAP;
 my $TERM_ENCODING = Term::Encoding::term_encoding();
 my $ENCODING_IS_UTF8 = $TERM_ENCODING =~ /^utf-?8$/i;
 
-my $DEBUG = 1;
+my $DEBUG = 0;
 
 our $NO_ENDING; # Force disable the Test::Pretty finalization process.
 
@@ -72,7 +72,28 @@ if ((!$ENV{HARNESS_ACTIVE} || $ENV{PERL_TEST_PRETTY_ENABLED})) {
     # Turn off legacy storage of results.
     Test::Stream->shared->set_use_legacy(0);
 
-    Test::Stream->shared->listen(\&stream_listener);
+    Test::Stream->shared->listen(sub {
+       my ($stream, $e) = @_;
+       my @sets = stream_listener($stream, $e);
+
+       # Render output
+       for my $set (@sets) {
+           my ($hid, $msg) = @$set;
+           next unless $msg;
+           my $enc = $e->encoding || die "Could not find encoding!";
+
+           # This is how you get the proper handle to use (STDERR, STDOUT, ETC).
+           my $io = $stream->io_sets->{$enc}->[$hid] || die "Could not find IO $hid for $enc";
+
+           # Make sure we don't alter these vars.
+           local($\, $", $,) = (undef, ' ', '');
+
+           # Otherwise we get "Wide character in print" errors.
+           binmode $io, "encoding($TERM_ENCODING)";
+           # print to the IO
+           print $io $msg;
+       }
+    });
 
     # my %plan_cmds = (
     #     no_plan     => \&Test::Builder::no_plan,
@@ -209,11 +230,21 @@ sub stream_listener {
     my @sets;
 
     if ($e->isa('Test::Stream::Event::Subtest')) {
-        # Subtest is a subclass of Ok, use Ok's to_tap method:
-        #print STDERR "e->to_tap(): ".Dumper($e->to_tap(undef, $stream->subtest_tap_delayed))."\n";
-        #@sets = subtest_render_events($e, undef, $stream->subtest_tap_delayed);
-        #$e->context->stream->listen(\&stream_listener);
-        @sets = $e->to_tap(undef, $stream->subtest_tap_delayed);
+        unless($stream->subtest_tap_delayed) {
+           #return if $e->[EXCEPTION]
+           #       && $e->[EXCEPTION]->isa('Test::Stream::Event::Bail');
+
+            # Subtest is a subclass of Ok, use Ok's to_tap method:
+            return $e->Test::Stream::Event::Ok::to_tap(undef);
+        }
+
+        # Subtest final result first
+        @sets = (
+           [ OUT_STD, $e->name . "\n" ], # Render the subtests name
+            subtest_render_events($stream, $e),
+            #$e->_render_events(@_),
+            #[OUT_STD, "}\n"],
+        );
     } elsif ( $e->isa('Test::Stream::Event::Ok') ) {
         my $name = $e->name || "  L" . $context->line . ": ". $context->file;
         @sets = $e->to_tap;
@@ -243,26 +274,12 @@ sub stream_listener {
                 $set = [
                     OUT_STD, $out,
                 ];
+                last;
             }
         }
     }
 
-    for my $set (@sets) {
-        my ($hid, $msg) = @$set;
-        next unless $msg;
-        my $enc = $e->encoding || die "Could not find encoding!";
-
-        # This is how you get the proper handle to use (STDERR, STDOUT, ETC).
-        my $io = $stream->io_sets->{$enc}->[$hid] || die "Could not find IO $hid for $enc";
-
-        # Make sure we don't alter these vars.
-        local($\, $", $,) = (undef, ' ', '');
-
-        # Otherwise we get "Wide character in print" errors.
-        binmode $io, "encoding($TERM_ENCODING)";
-        # print to the IO
-        print $io $msg;
-    }
+    return @sets;
 }
 
 sub _skip_all {
@@ -417,15 +434,14 @@ sub _subtest {
     $retval;
 }
 sub subtest_render_events {
-    my $self = shift;
-    my ($num, $delayed) = @_;
+    my ($stream, $e) = @_;
 
     my $idx = 0;
     my @out;
-    for my $e (@{$self->events}) {
+    for my $e (@{$e->events}) {
         next unless $e->can('to_tap');
         $idx++ if $e->isa('Test::Stream::Event::Ok');
-        push @out => $e->to_tap($idx, $delayed);
+        push @out => stream_listener($stream, $e);
     }
 
     for my $set (@out) {
