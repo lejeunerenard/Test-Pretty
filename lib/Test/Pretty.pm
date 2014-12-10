@@ -249,6 +249,15 @@ sub stream_listener {
         );
     } elsif ( $e->isa('Test::Stream::Event::Ok') ) {
        @sets = ok_to_tap($e);
+    } elsif ( $e->isa('Test::Stream::Event::Plan') ) {
+
+       # IF the plan is a skip all
+       if ($e->directive eq 'SKIP') {
+          $SHOW_DUMMY_TAP = 0;
+          @sets = ( [
+                OUT_STD, "1..0 # SKIP ". $e->reason . "\n",
+          ] );
+       }
     }
 
     return @sets;
