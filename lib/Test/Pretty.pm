@@ -179,7 +179,7 @@ END {
     my $stream = Test::Stream->shared;
     my $real_exit_code = $?;
 
-    my $ctx = Test::Stream::Context::context();
+    my $ctx = Test::Stream::Context::context(undef, $stream);
 
     # Don't bother with an ending if this is a forked copy.  Only the parent
     # should do the ending.
@@ -198,7 +198,7 @@ END {
 
     if ( $stream->plan && !( $stream->plan->directive && $stream->plan->directive eq 'NO PLAN' ) ) {
         if ($stream->count != $stream->plan->max) {
-            $ctx->diag("Bad plan: $stream->count != $stream->plan->max");
+            $ctx->diag("Bad plan: " . $stream->count . " != " . $stream->plan->max);
             $stream->is_passing(0);
         }
     }
