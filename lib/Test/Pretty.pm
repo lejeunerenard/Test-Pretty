@@ -271,7 +271,7 @@ sub ok_to_tap {
    if (defined($context->line)) {
        $src_line = $get_src_line->($context->file, $context->line);
    } else {
-      #diag(Carp::longmess("\$Test::Builder::Level is invalid. Testing library you are using is broken. : $Test::Builder::Level"));
+      $context->diag(Carp::longmess("\$Test::Builder::Level is invalid. Testing library you are using is broken. : $Test::Builder::Level"));
        $src_line = '';
    }
 
