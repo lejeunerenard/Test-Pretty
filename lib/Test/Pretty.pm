@@ -180,8 +180,10 @@ if ((!$ENV{HARNESS_ACTIVE} || $ENV{PERL_TEST_PRETTY_ENABLED})) {
 }
 
 END {
-    my $builder = Test::Builder->new;
+    my $stream = Test::Stream->shared;
     my $real_exit_code = $?;
+
+    my $ctx = Test::Stream::Context::context();
 
     # Don't bother with an ending if this is a forked copy.  Only the parent
     # should do the ending.
@@ -193,22 +195,22 @@ END {
     }
 
     # see Test::Builder::_ending
-    if( !$builder->{Have_Plan} and $builder->{Curr_Test} ) {
-        $builder->is_passing(0);
-        $builder->diag("Tests were run but no plan was declared and done_testing() was not seen.");
+    if( !$stream->plan and $stream->count ) {
+        $stream->is_passing(0);
+        $ctx->diag("Tests were run but no plan was declared and done_testing() was not seen.");
     }
 
-    if ($builder->{Have_Plan} && !$builder->{No_Plan}) {
-        if ($builder->{Curr_Test} != $builder->{Expected_Tests}) {
-            $builder->diag("Bad plan: $builder->{Curr_Test} != $builder->{Expected_Tests}");
-            $builder->is_passing(0);
+    if ( $stream->plan && !( $stream->plan->directive && $stream->plan->directive eq 'NO PLAN' ) ) {
+        if ($stream->count != $stream->plan->max) {
+            $ctx->diag("Bad plan: $stream->count != $stream->plan->max");
+            $stream->is_passing(0);
         }
     }
     if ($SHOW_DUMMY_TAP) {
-        printf("\n%s\n", ($?==0 && $builder->is_passing) ? 'ok' : 'not ok');
+        printf("\n%s\n", ($?==0 && $stream->is_passing) ? 'ok' : 'not ok');
     }
     if (!$real_exit_code) {
-        if ($builder->is_passing) {
+        if ($stream->is_passing) {
             ## no critic (Variables::RequireLocalizedPunctuationVars)
             $? = 0;
         } else {
