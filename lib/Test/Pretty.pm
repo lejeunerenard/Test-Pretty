@@ -129,9 +129,9 @@ if ((!$ENV{HARNESS_ACTIVE} || $ENV{PERL_TEST_PRETTY_ENABLED})) {
     # binmode $builder->failure_output(), "encoding($TERM_ENCODING)";
     # binmode $builder->todo_output(), "encoding($TERM_ENCODING)";
 
-    # if ($ENV{HARNESS_ACTIVE}) {
-    #     $SHOW_DUMMY_TAP++;
-    # }
+    if ($ENV{HARNESS_ACTIVE}) {
+        $SHOW_DUMMY_TAP++;
+    }
 } else {
     no warnings 'redefine';
     my $ORIGINAL_ok = \&Test::Builder::ok;
