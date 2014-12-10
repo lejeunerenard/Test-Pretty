@@ -260,6 +260,9 @@ sub stream_listener {
                 OUT_STD, "1..0 # SKIP ". $e->reason . "\n",
           ] );
        }
+    } else {
+       return unless $e->can('to_tap');
+       @sets = $e->to_tap();
     }
 
     return @sets;
