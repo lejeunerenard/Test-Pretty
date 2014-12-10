@@ -263,6 +263,15 @@ sub ok_to_tap {
 
    my ( $out, @sets );
 
+   # If skipped, render "skip" followed by the reason why.
+   if ( $e->skip ) {
+      return (
+         [
+            OUT_STD, colored(['yellow'], 'skip') . " " . $e->skip . "\n",
+         ]
+      );
+   }
+
    my $src_line;
    if (defined($context->line)) {
        $src_line = $get_src_line->($context->file, $context->line);
