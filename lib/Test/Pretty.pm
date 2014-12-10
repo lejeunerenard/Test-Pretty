@@ -225,8 +225,6 @@ sub stream_listener {
     $DEBUG && print STDERR "type: " . lc($type) . "\n";
     $DEBUG && print STDERR "=> In Subtest (". $e->in_subtest. ")\n" if $e->in_subtest;
 
-    my $context = $e->context;
-
     my @sets;
 
     if ($e->isa('Test::Stream::Event::Subtest')) {
@@ -234,8 +232,8 @@ sub stream_listener {
            #return if $e->[EXCEPTION]
            #       && $e->[EXCEPTION]->isa('Test::Stream::Event::Bail');
 
-            # Subtest is a subclass of Ok, use Ok's to_tap method:
-            return $e->Test::Stream::Event::Ok::to_tap(undef);
+           # Subtest is a subclass of Ok, use Ok's to_tap method:
+           return ok_to_tap($e);
         }
 
         # Subtest final result first
@@ -246,40 +244,63 @@ sub stream_listener {
             #[OUT_STD, "}\n"],
         );
     } elsif ( $e->isa('Test::Stream::Event::Ok') ) {
-        my $name = $e->name || "  L" . $context->line . ": ". $context->file;
-        @sets = $e->to_tap;
-
-        my $out;
-
-        unless($e->real_bool) {
-            my $fail_char = $ENCODING_IS_UTF8 ? "\x{2716}" : "x";
-            $out .= colored(['red'], $fail_char);
-        }
-        else {
-            my $success_char = $ENCODING_IS_UTF8 ? "\x{2713}" : "o";
-            $out .= colored(['green'], $success_char);
-        }
-
-        # Add name
-        if( defined $name ) {
-            $name =~ s|#|\\#|g;    # # in a name can confuse Test::Harness.
-            $out .= colored([$ENV{TEST_PRETTY_COLOR_NAME} || 'BRIGHT_BLACK'], "  $name");
-        }
-
-        $out .= "\n";
-
-        # Replace STDOUT
-        for my $set ( @sets ) {
-            if ( $set->[0] == OUT_STD ) {
-                $set = [
-                    OUT_STD, $out,
-                ];
-                last;
-            }
-        }
+       @sets = ok_to_tap($e);
     }
 
     return @sets;
+}
+
+=head2 ok_to_tap
+
+C<ok_to_tap> is the "pretty" version of Test::Stream::Event::Ok's C<to_tap>.
+
+=cut
+
+sub ok_to_tap {
+   my $e = shift;
+
+   my $context = $e->context;
+
+   my ( $out, @sets );
+
+   my $src_line;
+   if (defined($context->line)) {
+       $src_line = $get_src_line->($context->file, $context->line);
+   } else {
+      #diag(Carp::longmess("\$Test::Builder::Level is invalid. Testing library you are using is broken. : $Test::Builder::Level"));
+       $src_line = '';
+   }
+
+   my $name = $e->name || "  L" . $context->line . ": ". $src_line;
+   @sets = $e->to_tap;
+
+   unless($e->real_bool) {
+       my $fail_char = $ENCODING_IS_UTF8 ? "\x{2716}" : "x";
+       $out .= colored(['red'], $fail_char);
+   }
+   else {
+       my $success_char = $ENCODING_IS_UTF8 ? "\x{2713}" : "o";
+       $out .= colored(['green'], $success_char);
+   }
+
+   # Add name
+   if( defined $name ) {
+       $name =~ s|#|\\#|g;    # # in a name can confuse Test::Harness.
+       $out .= colored([$ENV{TEST_PRETTY_COLOR_NAME} || 'BRIGHT_BLACK'], "  $name");
+   }
+
+   $out .= "\n";
+
+   # Replace STDOUT
+   for my $set ( @sets ) {
+       if ( $set->[0] == OUT_STD ) {
+           $set = [
+               OUT_STD, $out,
+           ];
+           last;
+       }
+   }
+   return @sets;
 }
 
 sub _skip_all {
