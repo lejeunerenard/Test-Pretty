@@ -175,10 +175,11 @@ if ((!$ENV{HARNESS_ACTIVE} || $ENV{PERL_TEST_PRETTY_ENABLED})) {
     };
 }
 
-Test::Stream->shared->follow_up( sub {
-    my ($ctx) = @_;
-    my $stream = $ctx->stream;
+END {
+    my $stream = Test::Stream->shared;
     my $real_exit_code = $?;
+
+    my $ctx = Test::Stream::Context::context(undef, $stream);
 
     # Don't bother with an ending if this is a forked copy.  Only the parent
     # should do the ending.
@@ -215,7 +216,7 @@ Test::Stream->shared->follow_up( sub {
         }
     }
 NO_ENDING:
-});
+}
 
 sub stream_listener {
     my ($stream, $e) = @_;
