@@ -10,6 +10,7 @@ use Test::Stream (
     'OUT_ERR',
     'OUT_TODO',
 );
+use Test::Stream::Event::DummyTap;
 use Term::Encoding ();
 use File::Spec ();
 use Term::ANSIColor ();
@@ -57,13 +58,6 @@ my $get_src_line = sub {
 
 if ((!$ENV{HARNESS_ACTIVE} || $ENV{PERL_TEST_PRETTY_ENABLED})) {
     # make pretty
-    
-    #*Test::Builder::subtest = \&_subtest;
-    #*Test::Builder::ok = \&_ok;
-    #*Test::Builder::done_testing = \&_done_testing;
-    #*Test::Builder::skip = \&_skip;
-    #*Test::Builder::skip_all = \&_skip_all;
-    #*Test::Builder::expected_tests = \&_expected_tests;
 
     # Use Test::Stream
     # Turn off normal TAP output
@@ -94,40 +88,6 @@ if ((!$ENV{HARNESS_ACTIVE} || $ENV{PERL_TEST_PRETTY_ENABLED})) {
            print $io $msg;
        }
     });
-
-    # my %plan_cmds = (
-    #     no_plan     => \&Test::Builder::no_plan,
-    #     skip_all    => \&_skip_all,
-    #     tests       => \&__plan_tests,
-    # );
-    # *Test::Builder::plan = sub {
-    #     my( $self, $cmd, $arg ) = @_;
-
-    #     return unless $cmd;
-
-    #     local $Test::Builder::Level = $Test::Builder::Level + 1;
-
-    #     $self->croak("You tried to plan twice") if $self->{Have_Plan};
-
-    #     if( my $method = $plan_cmds{$cmd} ) {
-    #         local $Test::Builder::Level = $Test::Builder::Level + 1;
-    #         $self->$method($arg);
-    #     }
-    #     else {
-    #         my @args = grep { defined } ( $cmd, $arg );
-    #         $self->croak("plan() doesn't understand @args");
-    #     }
-
-    #     return 1;
-    # };
-
-    # my $builder = Test::Builder->new;
-    # $builder->no_ending(1);
-    # $builder->no_header(1); # plan
-
-    # binmode $builder->output(), "encoding($TERM_ENCODING)";
-    # binmode $builder->failure_output(), "encoding($TERM_ENCODING)";
-    # binmode $builder->todo_output(), "encoding($TERM_ENCODING)";
 
     if ($ENV{HARNESS_ACTIVE}) {
         $SHOW_DUMMY_TAP++;
@@ -175,11 +135,10 @@ if ((!$ENV{HARNESS_ACTIVE} || $ENV{PERL_TEST_PRETTY_ENABLED})) {
     };
 }
 
-END {
-    my $stream = Test::Stream->shared;
+Test::Stream->shared->follow_up( sub {
+    my ($ctx) = @_;
+    my $stream = $ctx->stream;
     my $real_exit_code = $?;
-
-    my $ctx = Test::Stream::Context::context(undef, $stream);
 
     # Don't bother with an ending if this is a forked copy.  Only the parent
     # should do the ending.
@@ -203,7 +162,12 @@ END {
         }
     }
     if ($SHOW_DUMMY_TAP) {
-        printf("\n%s\n", ($?==0 && $stream->is_passing) ? 'ok' : 'not ok');
+       $ctx->dummy_tap(($?==0 && $stream->is_passing));
+       #my $set = $stream->io_sets->init_encoding('legacy');
+       #my $std = $set->[0];
+       ##print STDERR "set->[0]: ".Dumper($set->[0])."\n";
+       #my $ok = ($?==0 && $stream->is_passing) ? 'ok' : 'not ok';
+       #printf $std "\n%s\n", $ok;
     }
     if (!$real_exit_code) {
         if ($stream->is_passing) {
@@ -216,7 +180,7 @@ END {
         }
     }
 NO_ENDING:
-}
+});
 
 sub stream_listener {
     my ($stream, $e) = @_;
@@ -326,157 +290,6 @@ sub ok_to_tap {
    return @sets;
 }
 
-sub _skip_all {
-    my ($self, $reason) = @_;
-
-    $self->{Skip_All} = $self->parent ? $reason : 1;
-
-    printf("1..0 # SKIP %s\n", $reason);
-    $SHOW_DUMMY_TAP = 0;
-    if ( $self->parent ) {
-        die bless {} => 'Test::Builder::Exception';
-    }
-    exit(0);
-}
-
-sub _ok {
-    my( $self, $test, $name ) = @_;
-
-    my ($pkg, $filename, $line, $sub) = caller($Test::Builder::Level);
-    my $src_line;
-    if (defined($line)) {
-        $src_line = $get_src_line->($filename, $line);
-    } else {
-        $self->diag(Carp::longmess("\$Test::Builder::Level is invalid. Testing library you are using is broken. : $Test::Builder::Level"));
-        $src_line = '';
-    }
-
-    if ( $self->{Child_Name} and not $self->{In_Destroy} ) {
-        $name = 'unnamed test' unless defined $name;
-        $self->is_passing(0);
-        $self->croak("Cannot run test ($name) with active children");
-    }
-    # $test might contain an object which we don't want to accidentally
-    # store, so we turn it into a boolean.
-    $test = $test ? 1 : 0;
-
-    lock $self->{Curr_Test};
-    $self->{Curr_Test}++;
-
-    # In case $name is a string overloaded object, force it to stringify.
-    $self->_unoverload_str( \$name );
-
-    $self->diag(<<"ERR") if defined $name and $name =~ /^[\d\s]+$/;
-    You named your test '$name'.  You shouldn't use numbers for your test names.
-    Very confusing.
-ERR
-
-    # Capture the value of $TODO for the rest of this ok() call
-    # so it can more easily be found by other routines.
-    my $todo    = $self->todo();
-    my $in_todo = $self->in_todo;
-    local $self->{Todo} = $todo if $in_todo;
-
-    $self->_unoverload_str( \$todo );
-
-    my $out;
-    my $result = &Test::Builder::share( {} );
-
-
-    unless($test) {
-        my $fail_char = $ENCODING_IS_UTF8 ? "\x{2716}" : "x";
-        $out .= colored(['red'], $fail_char);
-        @$result{ 'ok', 'actual_ok' } = ( ( $self->in_todo ? 1 : 0 ), 0 );
-    }
-    else {
-        my $success_char = $ENCODING_IS_UTF8 ? "\x{2713}" : "o";
-        $out .= colored(['green'], $success_char);
-        @$result{ 'ok', 'actual_ok' } = ( 1, $test );
-    }
-
-    $name ||= "  L$line: $src_line";
-
-    # $out .= " $self->{Curr_Test}" if $self->use_numbers;
-
-    if( defined $name ) {
-        $name =~ s|#|\\#|g;    # # in a name can confuse Test::Harness.
-        $out .= colored([$ENV{TEST_PRETTY_COLOR_NAME} || 'BRIGHT_BLACK'], "  $name");
-        $result->{name} = $name;
-    }
-    else {
-        $result->{name} = '';
-    }
-
-    if( $self->in_todo ) {
-        $out .= " # TODO $todo";
-        $result->{reason} = $todo;
-        $result->{type}   = 'todo';
-    }
-    else {
-        $result->{reason} = '';
-        $result->{type}   = '';
-    }
-
-    $self->{Test_Results}[ $self->{Curr_Test} - 1 ] = $result;
-    $out .= "\n";
-
-    # Dont print 'ok's for subtests. It's not pretty.
-    $self->_print($out) unless $sub =~/subtest/ and $test;
-
-    unless($test) {
-        my $msg = $self->in_todo ? "Failed (TODO)" : "Failed";
-        $self->_print_to_fh( $self->_diag_fh, "\n" ) if $ENV{HARNESS_ACTIVE};
-
-        my( undef, $file, $line ) = $self->caller;
-        if( defined $name ) {
-            $self->diag(qq[  $msg test '$name'\n]);
-            $self->diag(qq[  at $file line $line.\n]);
-        }
-        else {
-            $self->diag(qq[  $msg test at $file line $line.\n]);
-        }
-    }
-
-    $self->is_passing(0) unless $test || $self->in_todo;
-
-    # Check that we haven't violated the plan
-    $self->_check_is_passing_plan();
-
-    return $test ? 1 : 0;
-}
-
-sub _done_testing {
-    # do nothing
-    my $builder = Test::More->builder;
-    $builder->{Have_Plan} = 1;
-    $builder->{Done_Testing} = [caller];
-    $builder->{Expected_Tests} = $builder->current_test;
-}
-
-sub _subtest {
-    my ($self, $name) = @_;
-    my $orig_indent = $self->_indent();
-    my $ORIGINAL_note = \&Test::Builder::note;
-    no warnings 'redefine';
-    *Test::Builder::note = sub {
-        # Not sure why the output looses its encoding but lets set it back again.
-        # Otherwise we get "Wide character in print" errors.
-        binmode $_[0]->output(), "encoding($TERM_ENCODING)";
-        # If printing the beginning of a subtest, make it pretty
-        if ( $_[1] eq "Subtest: $name") {
-            print {$self->output} do {
-                 $orig_indent . "  $name\n";
-            };
-            return 0;
-        } else {
-            $ORIGINAL_note->(@_);
-        }
-    };
-    # Now that we've redefined note(), let Test::Builder run as normal.
-    my $retval = $ORIGINAL_subtest->(@_);
-    *Test::Builder::note = $ORIGINAL_note;
-    $retval;
-}
 sub subtest_render_events {
     my ($stream, $e) = @_;
 
@@ -493,60 +306,6 @@ sub subtest_render_events {
     }
 
     return @out;
-}
-
-sub __plan_tests {
-    my ( $self, $arg ) = @_;
-
-    if ($arg) {
-        local $Test::Builder::Level = $Test::Builder::Level + 1;
-        return $self->expected_tests($arg);
-    }
-    elsif ( !defined $arg ) {
-        $self->croak("Got an undefined number of tests");
-    }
-    else {
-        $self->croak("You said to run 0 tests");
-    }
-
-    return;
-}
-
-sub _expected_tests {
-    my $self = shift;
-    my($max) = @_;
-
-    if(@_) {
-        $self->croak("Number of tests must be a positive integer.  You gave it '$max'")
-          unless $max =~ /^\+?\d+$/;
-
-        $self->{Expected_Tests} = $max;
-        $self->{Have_Plan}      = 1;
-
-        # $self->_output_plan($max) unless $self->no_header;
-    }
-    return $self->{Expected_Tests};
-}
-
-sub _skip {
-    my ($self, $why) = @_;
-
-    lock( $self->{Curr_Test} );
-    $self->{Curr_Test}++;
-
-    $self->{Test_Results}[ $self->{Curr_Test} - 1 ] = &Test::Builder::share(
-        {
-            'ok'      => 1,
-            actual_ok => 1,
-            name      => '',
-            type      => 'skip',
-            reason    => $why,
-        }
-    );
-
-    $self->_print(colored(['yellow'], 'skip') . " $why");
-
-    return 1;
 }
 
 1;
