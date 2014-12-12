@@ -5,6 +5,7 @@ use 5.008001;
 our $VERSION = '0.30';
 
 use Test::Stream (
+    subtest_tap => 'delayed',
     'OUT_STD',
     'OUT_ERR',
     'OUT_TODO',
