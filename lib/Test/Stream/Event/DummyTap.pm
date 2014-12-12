@@ -18,7 +18,7 @@ sub to_tap {
 
    my $ok = ($self->succeed) ? 'ok' : 'not ok';
 
-   return [ OUT_STD, "$ok\n", ];
+   return [ OUT_STD, "\n$ok\n", ];
 }
 
 sub extra_details {
