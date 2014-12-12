@@ -147,10 +147,10 @@ Test::Stream->shared->follow_up( sub {
     # Don't bother with an ending if this is a forked copy.  Only the parent
     # should do the ending.
     if( $ORIGINAL_PID!= $$ or $in_subtest) {
-        goto NO_ENDING;
+        return;
     }
     if ($Test::Pretty::NO_ENDING) {
-        goto NO_ENDING;
+        return;
     }
 
     # see Test::Builder::_ending
@@ -183,7 +183,6 @@ Test::Stream->shared->follow_up( sub {
             $? = 1;
         }
     }
-NO_ENDING:
 });
 
 sub stream_listener {
