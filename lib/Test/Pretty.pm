@@ -235,13 +235,12 @@ sub ok_to_tap {
    if (defined($context->line)) {
        $src_line = $get_src_line->($context->file, $context->line);
    } else {
-      $context->diag(Carp::longmess("\$Test::Builder::Level is invalid. Testing library you are using is broken. : $Test::Builder::Level"));
+      $e->add_diag(Carp::longmess("\$Test::Builder::Level is invalid. Testing library you are using is broken. : $Test::Builder::Level"));
        $src_line = '';
    }
 
    $src_line = ( $src_line ) ? ": ". $src_line : "";
    my $name = $e->name || "  L" . $context->line . $src_line;
-   @sets = $e->to_tap;
 
    unless($e->real_bool) {
        my $fail_char = $ENCODING_IS_UTF8 ? "\x{2716}" : "x";
@@ -258,18 +257,18 @@ sub ok_to_tap {
        $out .= colored([$ENV{TEST_PRETTY_COLOR_NAME} || 'BRIGHT_BLACK'], "  $name");
    }
 
+   if( $context->in_todo ) {
+       $out .= " # TODO ".$e->todo;
+   }
+
    $out .= "\n";
 
-   # Replace STDOUT
-   for my $set ( @sets ) {
-       if ( $set->[0] == OUT_STD ) {
-           $set = [
-               OUT_STD, $out,
-           ];
-           last;
-       }
-   }
-   return @sets;
+   return [ OUT_STD, $out ] unless $e->diag;
+
+   return (
+      [OUT_STD, $out,],
+      map {$_->to_tap()} @{$e->diag},
+   );
 }
 
 sub subtest_render_events {
