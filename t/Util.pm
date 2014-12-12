@@ -35,8 +35,8 @@ sub run_test {
         return $out;
     } else {
         # child
-        open(STDOUT, ">", $filename) or die "Cannot redirect";
-        open(STDERR, ">", $filename) or die "Cannot redirect";
+        open(STDOUT, ">>", $filename) or die "Cannot redirect";
+        open(STDERR, ">>", $filename) or die "Cannot redirect";
         exec $^X, '-Ilib', '-MTest::Pretty', $path;
         die "Cannot exec";
     }
