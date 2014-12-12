@@ -255,7 +255,8 @@ sub ok_to_tap {
        $src_line = '';
    }
 
-   my $name = $e->name || "  L" . $context->line . ": ". $src_line;
+   $src_line = ( $src_line ) ? ": ". $src_line : "";
+   my $name = $e->name || "  L" . $context->line . $src_line;
    @sets = $e->to_tap;
 
    unless($e->real_bool) {
