@@ -5,7 +5,6 @@ use 5.008001;
 our $VERSION = '0.32';
 
 use Test::Stream (
-   #subtest_tap => 'delayed',
     'OUT_STD',
     'OUT_ERR',
     'OUT_TODO',
@@ -35,11 +34,7 @@ my $SHOW_DUMMY_TAP;
 my $TERM_ENCODING = Term::Encoding::term_encoding();
 my $ENCODING_IS_UTF8 = $TERM_ENCODING =~ /^utf-?8$/i;
 
-my $DEBUG = 0;
-
 our $NO_ENDING; # Force disable the Test::Pretty finalization process.
-
-my $ORIGINAL_subtest = \&Test::Builder::subtest;
 
 our $BASE_DIR = Cwd::getcwd();
 my %filecache;
@@ -169,24 +164,14 @@ Test::Stream->shared->follow_up( sub {
             $stream->is_passing(0);
         }
     }
+
     if ($SHOW_DUMMY_TAP and !$called_by_done_testing) {
        $ctx->dummy_tap(($?==0 && $stream->is_passing));
-       #my $set = $stream->io_sets->init_encoding('legacy');
-       #my $std = $set->[0];
-       ##print STDERR "set->[0]: ".Dumper($set->[0])."\n";
-       #my $ok = ($?==0 && $stream->is_passing) ? 'ok' : 'not ok';
-       #printf $std "\n%s\n", $ok;
     }
 });
 
 sub stream_listener {
     my ($stream, $e) = @_;
-
-    $DEBUG && print STDERR "---- event ----\n";
-    my $type = blessed $e;
-    $type =~ s/^.*:://g;
-    $DEBUG && print STDERR "type: " . lc($type) . "\n";
-    $DEBUG && print STDERR "=> In Subtest (". $e->in_subtest. ")\n" if $e->in_subtest;
 
     my @sets;
 
@@ -203,8 +188,6 @@ sub stream_listener {
         @sets = (
            [ OUT_STD, $e->name . "\n" ], # Render the subtests name
             subtest_render_events($stream, $e),
-            #$e->_render_events(@_),
-            #[OUT_STD, "}\n"],
         );
     } elsif ( $e->isa('Test::Stream::Event::Ok') ) {
        @sets = ok_to_tap($e);
