@@ -156,7 +156,6 @@ Test::Stream->shared->follow_up( sub {
     # see Test::Builder::_ending
     if( !$stream->plan and $stream->count and !$called_by_done_testing) {
         $stream->is_passing(0);
-        $ctx->diag("Tests were run but no plan was declared and done_testing() was not seen.");
     }
 
     if ( $stream->plan && !( $stream->plan->directive && $stream->plan->directive eq 'NO PLAN' ) ) {
@@ -172,16 +171,6 @@ Test::Stream->shared->follow_up( sub {
        ##print STDERR "set->[0]: ".Dumper($set->[0])."\n";
        #my $ok = ($?==0 && $stream->is_passing) ? 'ok' : 'not ok';
        #printf $std "\n%s\n", $ok;
-    }
-    if (!$real_exit_code) {
-        if ($stream->is_passing) {
-            ## no critic (Variables::RequireLocalizedPunctuationVars)
-            $? = 0;
-        } else {
-            # TODO: exit status may be 'how many failed'
-            ## no critic (Variables::RequireLocalizedPunctuationVars)
-            $? = 1;
-        }
     }
 });
 
