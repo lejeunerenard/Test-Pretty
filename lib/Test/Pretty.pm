@@ -164,7 +164,7 @@ Test::Stream->shared->follow_up( sub {
         }
     }
 
-    if ($SHOW_DUMMY_TAP and !$called_by_done_testing) {
+    if ($SHOW_DUMMY_TAP) {
        $ctx->dummy_tap(($?==0 && $stream->is_passing));
     }
 });
