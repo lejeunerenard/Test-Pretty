@@ -138,11 +138,9 @@ Test::Stream->shared->follow_up( sub {
 
     my $called_by_done_testing = ( $ctx->subname and $ctx->subname eq 'Test::More::done_testing' );
 
-    my $in_subtest = ( $ctx->subname and $ctx->subname eq 'Test::Stream::Subtest::subtest' );
-
     # Don't bother with an ending if this is a forked copy.  Only the parent
     # should do the ending.
-    if( $ORIGINAL_PID!= $$ or $in_subtest) {
+    if( $ORIGINAL_PID!= $$ ) {
         return;
     }
     if ($Test::Pretty::NO_ENDING) {
