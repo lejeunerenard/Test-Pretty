@@ -8,11 +8,6 @@ use Test::Stream::Event(
    ctx_method => 'dummy_tap',
 );
 
-sub init {
-   my $self = shift;
-   $self->SUPER::init();
-}
-
 sub to_tap {
    my $self = shift;
 
@@ -24,7 +19,9 @@ sub to_tap {
 sub extra_details {
    my $self = shift;
 
-   return $self->SUPER::extra_details();
+   return (
+      succeed => $self->succeed || 0,
+   );
 }
 
 1;
