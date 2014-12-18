@@ -136,7 +136,7 @@ Test::Stream->shared->follow_up( sub {
     my $stream = $ctx->stream;
     my $real_exit_code = $?;
 
-    my $called_by_done_testing = ( $ctx->subname and $ctx->subname eq 'Test::More::done_testing' );
+    my $called_by_done_testing = not $ctx->isa('Test::Stream::ExitMagic::Context' );
 
     # Don't bother with an ending if this is a forked copy.  Only the parent
     # should do the ending.
