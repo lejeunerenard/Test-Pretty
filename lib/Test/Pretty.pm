@@ -55,35 +55,60 @@ my $get_src_line = sub {
 if ((!$ENV{HARNESS_ACTIVE} || $ENV{PERL_TEST_PRETTY_ENABLED})) {
     # make pretty
 
-    # Use Test::Stream
-    # Turn off normal TAP output
-    Test::Stream->shared->set_use_tap(0);
+    # Check if Using Stream API
+    eval{ use Test::Stream };
 
-    # Turn off legacy storage of results.
-    Test::Stream->shared->set_use_legacy(0);
-
-    Test::Stream->shared->listen(sub {
-       my ($stream, $e) = @_;
-       my @sets = stream_listener($stream, $e);
-
-       # Render output
-       for my $set (@sets) {
-           my ($hid, $msg) = @$set;
-           next unless $msg;
-           my $enc = $e->encoding || die "Could not find encoding!";
-
-           # This is how you get the proper handle to use (STDERR, STDOUT, ETC).
-           my $io = $stream->io_sets->{$enc}->[$hid] || die "Could not find IO $hid for $enc";
-
-           # Make sure we don't alter these vars.
-           local($\, $", $,) = (undef, ' ', '');
-
-           # Otherwise we get "Wide character in print" errors.
-           binmode $io, "encoding($TERM_ENCODING)";
-           # print to the IO
-           print $io $msg;
+    # If an error is found, assume Test::Stream isn't installed
+    if ($@) {
+       # Implement using monkey patching
+       {
+          no warnings 'redefine';
+          *Test::Builder::subtest = \&_subtest;
+          *Test::Builder::ok = \&_ok;
+          *Test::Builder::done_testing = \&_done_testing;
+          *Test::Builder::skip = \&_skip;
+          *Test::Builder::skip_all = \&_skip_all;
+          *Test::Builder::expected_tests = \&_expected_tests;
        }
-    });
+       my $builder = Test::Builder->new;
+       $builder->no_ending(1);
+       $builder->no_header(1); # plan
+
+       # Set encoding of File Handlers
+       binmode $builder->output(), "encoding($TERM_ENCODING)";
+       binmode $builder->failure_output(), "encoding($TERM_ENCODING)";
+       binmode $builder->todo_output(), "encoding($TERM_ENCODING)";
+    } else {
+       # Use Test::Stream
+       # Turn off normal TAP output
+       Test::Stream->shared->set_use_tap(0);
+
+       # Turn off legacy storage of results.
+       Test::Stream->shared->set_use_legacy(0);
+
+       Test::Stream->shared->listen(sub {
+          my ($stream, $e) = @_;
+          my @sets = stream_listener($stream, $e);
+
+          # Render output
+          for my $set (@sets) {
+              my ($hid, $msg) = @$set;
+              next unless $msg;
+              my $enc = $e->encoding || die "Could not find encoding!";
+
+              # This is how you get the proper handle to use (STDERR, STDOUT, ETC).
+              my $io = $stream->io_sets->{$enc}->[$hid] || die "Could not find IO $hid for $enc";
+
+              # Make sure we don't alter these vars.
+              local($\, $", $,) = (undef, ' ', '');
+
+              # Otherwise we get "Wide character in print" errors.
+              binmode $io, "encoding($TERM_ENCODING)";
+              # print to the IO
+              print $io $msg;
+          }
+       });
+    }
 
     if ($ENV{HARNESS_ACTIVE}) {
         $SHOW_DUMMY_TAP++;
