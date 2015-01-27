@@ -1,4 +1,12 @@
 language: perl
 perl:
-  - 5.16
-  - 5.14
+  - "5.20"
+  - "5.18"
+  - "5.16"
+  - "5.14"
+env:
+  - INSTALL_ALPHA_TEST_MORE=0
+  - INSTALL_ALPHA_TEST_MORE=1
+install:
+  - "( [[ INSTALL_ALPHA_TEST_MORE -eq 1 ]] && cpanm --verbose --no-interactive --no-man-pages --notest --skip-satisfied http://search.cpan.org/CPAN/authors/id/E/EX/EXODIST/Test-Simple-1.301001_097.tar.gz ) || :"
+  - "cpanm --verbose --no-interactive --no-man-pages --notest --skip-satisfied --installdeps ."
