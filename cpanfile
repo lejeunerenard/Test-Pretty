@@ -11,7 +11,7 @@ requires 'TAP::Parser';
 requires 'autodie';
 requires 'parent';
 requires 'perl', '5.008001';
-requires 'Test::More', '1.301001';
+requires 'Test::More', '0.98';
 
 on test => sub {
     requires 'Test::Requires';
